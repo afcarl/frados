@@ -254,8 +254,6 @@ static PyObject* pypsolas16(PyObject* self, PyObject* args)
 
   int length1 = PyString_Size(data1) / sizeof(short);
   int length2 = PyString_Size(data2) / sizeof(short);
-  fprintf(stderr, "outlen=%d, offset1=%d, offset2=%d, window1=%d, window2=%d, length1=%d, length2=%d\n",
-	  outlen, offset1, offset2, window1, window2, length1, length2);
   if (window1 < 0 || window2 < 0 || 
       offset1 < 0 || length1 < offset1+window1 ||
       offset2 < 0 || length2 < offset2+window2) {

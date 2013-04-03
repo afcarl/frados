@@ -4,37 +4,8 @@
 # usage: python frados.py [-d delta] input.wav out.wav
 #
 import sys
-import wave
-import array
 import wavcorr
 from wavestream import WaveReader, WaveWriter
-from math import pi, cos, sqrt
-
-# vector functions (numpy would be recommended)
-try:
-    import numpy
-    def mkarray(x):
-        return numpy.array(x)
-    def add(x, y):
-        return numpy.add(x,y)
-    def multiply(x, y):
-        return numpy.multiply(x,y)
-    def dot(x, y):
-        return numpy.dot(x,y)
-    def hanning(n):
-        return numpy.hanning(n)
-except ImportError:
-    def mkarray(x):
-        return list(x)
-    def add(x, y):
-        return [ a+b for (a,b) in zip(x,y) ]
-    def multiply(x, y):
-        return [ a*b for (a,b) in zip(x,y) ]
-    def dot(x, y):
-        return sum( a*b for (a,b) in zip(x,y) )
-    def hanning(n):
-        C = 2*pi/(n-1)
-        return [ (1.0-cos(C*i))*0.5 for i in xrange(n) ]
 
 
 ##  PitchContour
@@ -68,7 +39,6 @@ class PitchContour(object):
                 (pos1,pitch1) = self.pitches[i+1]
                 x += (pitch0+pitch1)*(pos1-pos0)/2
             self.avg = x/(self.pos1-self.pos0)
-            print self
             return
 
         def getsrc(self, pos):
@@ -77,7 +47,7 @@ class PitchContour(object):
                 (pos1,pitch1) = self.pitches[i+1]
                 if pos0 <= pos and pos <= pos1:
                     return (pos-pos0)*(pitch1-pitch0)/(pos1-pos0)+pitch0
-            return None
+            return 0
 
         def getavg(self, pos):
             return self.avg
@@ -93,11 +63,10 @@ class PitchContour(object):
         self._segment = None
         return
     
-    def load(self, wav):
+    def load(self, buf, nframes):
         #print 'detection: %s samples...' % len(wav)
         i = 0
-        buf = wav.readraw()
-        while i < len(wav):
+        while i+self.wmax < nframes:
             (dmax, mmax) = wavcorr.autocorrs16(self.wmin, self.wmax, buf, i)
             if self.threshold < mmax:
                 pitch = self.framerate/dmax
@@ -112,7 +81,7 @@ class PitchContour(object):
                     self._segment.finish()
                     self._segment = None
                 i += self.wmin/2
-        self._offset += len(wav)
+        self._offset += nframes
         if self._segment is not None:
             self._segment.add(self._offset, None)
             self._segment.finish()
@@ -122,57 +91,43 @@ class PitchContour(object):
         for seg in self.segments:
             if seg.pos0 <= pos and pos <= seg.pos1:
                 return seg.getsrc(pos)
-        return None
+        return 0
 
     def getavg(self, pos):
         for seg in self.segments:
             if seg.pos0 <= pos and pos <= seg.pos1:
                 return seg.getavg(pos)
-        return None
+        return 0
 
 
 ##   psola(src, framerate, pitchfuncsrc, pitchfuncdst)
 ##
 def psola(src, framerate, pitchfuncsrc, pitchfuncdst, defaultwindow):
-    
-    def stretch(src, n1):
-        n0 = len(src)
-        return [ src[i*n0/n1] for i in xrange(n1) ]
-
-    def put(dst, i, src):
-        n = min(len(src), len(dst)-i)
-        if 0 < n:
-            dst[i:i+n] = add(dst[i:i+n], src[:n])
-        return
-
-    print >>sys.stderr, 'psola: %s samples...' % len(src)
-    dst = [ 0.0 for _ in xrange(len(src)) ]
+    nsamples = len(src)/2
+    print >>sys.stderr, 'psola: %s samples...' % nsamples
+    dst = ''
     psrc = 0
     pdst = 0
-    window0 = 0
+    window0 = defaultwindow
     while 1:
         pitchsrc = pitchfuncsrc(psrc)
         pitchdst = pitchfuncdst(pdst)
-        if pitchsrc is None or pitchdst is None:
+        if pitchsrc == 0 or pitchdst == 0:
             d = defaultwindow
             window1 = defaultwindow
         else:
             d = framerate/pitchsrc
             window1 = framerate/pitchdst
-        if len(src) <= psrc+d: break
+        if nsamples <= psrc+d: break
         #print psrc, pitchsrc, pitchdst, window1
-        while d <= psrc and pdst+window0+window1 < psrc:
-            hann0 = hanning(window0*2)[:window0]
-            hann1 = hanning(window1*2)[window1:]
-            a0 = multiply(stretch(src[psrc-d:psrc], window0), hann0)
-            a1 = multiply(stretch(src[psrc:psrc+d], window1), hann1)
+        while d <= psrc and psrc+d < nsamples and pdst+window0+window1 < psrc:
+            dst += wavcorr.psolas16(window0, psrc-d, d, src, psrc, d, src)
             #print ' ',(pdst,pdst+window0,pdst+window0+window1)
-            put(dst, pdst, a0)
             pdst += window0
-            put(dst, pdst, a1)
             window0 = window1
-            if pitchsrc is None: break
+            if pitchsrc == 0: break
         psrc += d
+    dst += wavcorr.psolas16(window0, psrc-d, d, src, 0, 0, src)
     return dst
 
 
@@ -185,15 +140,15 @@ def fradosify(path, outfp, delta):
     if src.sampwidth != 2: raise ValueError('invalid sampling width')
     dst = WaveWriter(outfp, framerate=src.framerate)
         
+    buf = src.readraw()
     contour = PitchContour(src.framerate)
-    contour.load(src)
+    contour.load(buf, src.nframes)
     def f(t):
         x = contour.getavg(t)
-        if x is not None:
+        if x != 0:
             x = int(x*ratio)
         return x
-    src.seek(0)
-    dst.write(psola(src.read(), src.framerate, contour.getsrc, f, contour.wmin))
+    dst.writeraw(psola(buf, src.framerate, contour.getsrc, f, contour.wmin))
     
     src.close()
     dst.close()
@@ -212,8 +167,9 @@ def main(argv):
     delta = +8
     for (k, v) in opts:
         if k == '-d': delta = int(v)
-    if len(args) < 2: return usage()
+    if not args: return usage()
     path = args.pop(0)
+    if not args: return usage()
     outpath = args.pop(0)
     outfp = open(outpath, 'wb')
     fradosify(path, outfp, delta)
