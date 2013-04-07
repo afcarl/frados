@@ -3,101 +3,11 @@
 # frados.py
 # usage: python frados.py [-d delta] input.wav out.wav
 #
+
 import sys
 import wavcorr
 from wavestream import WaveReader, WaveWriter
-
-
-##  PitchContour
-##
-class PitchContour(object):
-
-    class Segment(object):
-
-        def __init__(self):
-            self.pitches = []
-            return
-
-        def __repr__(self):
-            (pos1,_) = self.pitches[-1]
-            s = '-'.join( '%d-[%d]' % (pos,pitch) for (pos,pitch) in self.pitches[:-1] )
-            return '(%s-%d)' % (s, pos1)
-
-        def add(self, pos, pitch):
-            if pitch is None:
-                (_,pitch) = self.pitches[-1]
-            self.pitches.append((pos, pitch))
-            return
-
-        def finish(self):
-            self.pos0 = min( pos for (pos,_) in self.pitches )
-            self.pos1 = max( pos for (pos,_) in self.pitches )
-            x = 0
-            for i in xrange(len(self.pitches)-1):
-                (pos0,pitch0) = self.pitches[i]
-                #print pos0, pitch0
-                (pos1,pitch1) = self.pitches[i+1]
-                x += (pitch0+pitch1)*(pos1-pos0)/2
-            self.avg = x/(self.pos1-self.pos0)
-            return
-
-        def getsrc(self, pos):
-            for i in xrange(len(self.pitches)-1):
-                (pos0,pitch0) = self.pitches[i]
-                (pos1,pitch1) = self.pitches[i+1]
-                if pos0 <= pos and pos <= pos1:
-                    return (pos-pos0)*(pitch1-pitch0)/(pos1-pos0)+pitch0
-            return 0
-
-        def getavg(self, pos):
-            return self.avg
-
-    def __init__(self, framerate,
-                 pitchmin=100, pitchmax=240, threshold=0.7):
-        self.framerate = framerate
-        self.wmin = (framerate/pitchmax)
-        self.wmax = (framerate/pitchmin)
-        self.threshold = threshold
-        self.segments = []
-        self._offset = 0
-        self._segment = None
-        return
-    
-    def load(self, buf, nframes):
-        #print 'detection: %s samples...' % len(wav)
-        i = 0
-        while i+self.wmax < nframes:
-            (dmax, mmax) = wavcorr.autocorrs16(self.wmin, self.wmax, buf, i)
-            if self.threshold < mmax:
-                pitch = self.framerate/dmax
-                if self._segment is None:
-                    self._segment = self.Segment()
-                    self.segments.append(self._segment)
-                self._segment.add(self._offset+i, pitch)
-                i += self.wmin/2
-            else:
-                if self._segment is not None:
-                    self._segment.add(self._offset+i, None)
-                    self._segment.finish()
-                    self._segment = None
-                i += self.wmin/2
-        self._offset += nframes
-        if self._segment is not None:
-            self._segment.add(self._offset, None)
-            self._segment.finish()
-        return
-
-    def getsrc(self, pos):
-        for seg in self.segments:
-            if seg.pos0 <= pos and pos <= seg.pos1:
-                return seg.getsrc(pos)
-        return 0
-
-    def getavg(self, pos):
-        for seg in self.segments:
-            if seg.pos0 <= pos and pos <= seg.pos1:
-                return seg.getavg(pos)
-        return 0
+from pitch import PitchContour
 
 
 ##   psola(src, framerate, pitchfuncsrc, pitchfuncdst)
