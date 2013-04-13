@@ -105,7 +105,7 @@ def main(argv):
         print 'usage: %s [-M|-F] [-n pitchmin] [-m pitchmax] [-t threshold] wav ...' % argv[0]
         return 100
     try:
-        (opts, args) = getopt.getopt(argv[1:], 'MFn:m:')
+        (opts, args) = getopt.getopt(argv[1:], 'MFn:m:t:')
     except getopt.GetoptError:
         return usage()
     pitchmin = 70
