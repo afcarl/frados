@@ -18,41 +18,58 @@ def psola(src, framerate, pitchfuncsrc, pitchfuncdst, defaultwindow):
     dst = ''
     psrc = 0
     pdst = 0
-    window0 = defaultwindow
+    srcwindow0 = 0
+    dstwindow0 = 0
     while 1:
         pitchsrc = pitchfuncsrc(psrc)
         pitchdst = pitchfuncdst(pdst)
         if pitchsrc == 0 or pitchdst == 0:
-            d = defaultwindow
-            window1 = defaultwindow
+            srcwindow1 = defaultwindow
+            dstwindow1 = defaultwindow
         else:
-            d = framerate/pitchsrc
-            window1 = framerate/pitchdst
-        if nsamples <= psrc+d: break
+            srcwindow1 = framerate/pitchsrc/2
+            dstwindow1 = framerate/pitchdst/2
+        if nsamples <= psrc+srcwindow1: break
+        dst += wavcorr.psolas16(dstwindow1,
+                                psrc, srcwindow1, src,
+                                psrc, srcwindow1, src)
+        pdst += dstwindow1
+        psrc += srcwindow1
+        print pitchsrc, pitchdst, (psrc, srcwindow1, dstwindow1)
+        (srcwindow0,dstwindow0) = (srcwindow1,dstwindow1)
+        continue
         #print psrc, pitchsrc, pitchdst, window1
-        while d <= psrc and psrc+d < nsamples and pdst+window0+window1 < psrc:
-            dst += wavcorr.psolas16(window0, psrc-d, d, src, psrc, d, src)
-            #print ' ',(pdst,pdst+window0,pdst+window0+window1)
-            pdst += window0
-            window0 = window1
+        while srcwindow <= psrc and psrc+srcwindow < nsamples and pdst+dstwindow0+dstwindow1 < psrc:
+            dst += wavcorr.psolas16(dstwindow0,
+                                    psrc-srcwindow, srcwindow, src,
+                                    psrc-srcwindow, srcwindow, src)
+            #print ' ',(pdst,pdst+dstwindow0,pdst+dstwindow0+dstwindow1)
+            pdst += dstwindow0
+            dstwindow0 = dstwindow1
             if pitchsrc == 0: break
-        psrc += d
-    dst += wavcorr.psolas16(window0, psrc-d, d, src, 0, 0, src)
+        psrc += srcwindow
     return dst
 
 
 # fradosify
-def fradosify(path, outfp, delta):
+def fradosify(path, outfp, delta,
+              pitchmin=70, pitchmax=400, threshold=0.7):
     print >>sys.stderr, 'reading: %r' % path
     ratio = pow(2, delta/12.0)
     src = WaveReader(path)
     if src.nchannels != 1: raise ValueError('invalid number of channels')
     if src.sampwidth != 2: raise ValueError('invalid sampling width')
+    contour = PitchContour(
+        src.framerate,
+        pitchmin=pitchmin, pitchmax=pitchmax,
+        threshold=threshold)
+
     dst = WaveWriter(outfp, framerate=src.framerate)
-        
-    buf = src.readraw()
-    contour = PitchContour(src.framerate)
-    contour.load(buf, src.nframes)
+
+    nframes = src.nframes
+    buf = src.readraw(nframes)
+    contour.reset()
+    contour.load(buf, nframes)
     def f(t):
         x = contour.getavg(t)
         if x != 0:
@@ -68,21 +85,28 @@ def fradosify(path, outfp, delta):
 def main(argv):
     import getopt
     def usage():
-        print 'usage: %s [-d delta] input.wav output.wav' % argv[0]
+        print 'usage: %s [-M|-F] [-t threshold] [-d delta] input.wav output.wav' % argv[0]
         return 100
     try:
-        (opts, args) = getopt.getopt(argv[1:], 'd:')
+        (opts, args) = getopt.getopt(argv[1:], 'MFt:d:')
     except getopt.GetoptError:
         return usage()
     delta = +8
+    pitchmin = 70
+    pitchmax = 400
+    threshold = 0.9
     for (k, v) in opts:
-        if k == '-d': delta = int(v)
+        if k == '-M': (pitchmin,pitchmax) = (75,200) # male voice
+        elif k == '-F': (pitchmin,pitchmax) = (150,300) # female voice
+        elif k == '-t': threshold = float(v)
+        elif k == '-d': delta = int(v)
     if not args: return usage()
     path = args.pop(0)
     if not args: return usage()
     outpath = args.pop(0)
     outfp = open(outpath, 'wb')
-    fradosify(path, outfp, delta)
+    fradosify(path, outfp, delta,
+              pitchmin=pitchmin, pitchmax=pitchmax, threshold=threshold)
     outfp.close()
     return
 

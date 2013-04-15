@@ -19,4 +19,4 @@ wavcorr.so: wavcorr.c
 frados.py: wavcorr.so
 
 test: frados.py
-	$(PYTHON) frados.py iloveyou.wav out.wav
+	$(PYTHON) frados.py -M iloveyou.wav out.wav

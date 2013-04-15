@@ -9,47 +9,50 @@ import wavcorr
 from wavestream import WaveReader
 
 
+##  PitchSegment
+##
+class PitchSegment(object):
+
+    def __init__(self):
+        self.pitches = []
+        return
+
+    def __repr__(self):
+        (pos1,_) = self.pitches[-1]
+        s = '-'.join( '%d-[%d]' % (pos,pitch) for (pos,pitch) in self.pitches[:-1] )
+        return '(%s-%d)' % (s, pos1)
+
+    def add(self, pos, pitch):
+        self.pitches.append((pos, pitch))
+        return
+
+    def finish(self):
+        self.pos0 = min( pos for (pos,_) in self.pitches )
+        self.pos1 = max( pos for (pos,_) in self.pitches )
+        x = 0
+        for i in xrange(len(self.pitches)-1):
+            (pos0,pitch0) = self.pitches[i]
+            #print pos0, pitch0
+            (pos1,pitch1) = self.pitches[i+1]
+            x += (pitch0+pitch1)*(pos1-pos0)/2
+        self.avg = x/(self.pos1-self.pos0)
+        return
+
+    def getsrc(self, pos):
+        for i in xrange(len(self.pitches)-1):
+            (pos0,pitch0) = self.pitches[i]
+            (pos1,pitch1) = self.pitches[i+1]
+            if pos0 <= pos and pos <= pos1:
+                return (pos-pos0)*(pitch1-pitch0)/(pos1-pos0)+pitch0
+        return 0
+
+    def getavg(self, pos):
+        return self.avg
+
+
 ##  PitchContour
 ##
 class PitchContour(object):
-
-    class Segment(object):
-
-        def __init__(self):
-            self.pitches = []
-            return
-
-        def __repr__(self):
-            (pos1,_) = self.pitches[-1]
-            s = '-'.join( '%d-[%d]' % (pos,pitch) for (pos,pitch) in self.pitches[:-1] )
-            return '(%s-%d)' % (s, pos1)
-
-        def add(self, pos, pitch):
-            self.pitches.append((pos, pitch))
-            return
-
-        def finish(self):
-            self.pos0 = min( pos for (pos,_) in self.pitches )
-            self.pos1 = max( pos for (pos,_) in self.pitches )
-            x = 0
-            for i in xrange(len(self.pitches)-1):
-                (pos0,pitch0) = self.pitches[i]
-                #print pos0, pitch0
-                (pos1,pitch1) = self.pitches[i+1]
-                x += (pitch0+pitch1)*(pos1-pos0)/2
-            self.avg = x/(self.pos1-self.pos0)
-            return
-
-        def getsrc(self, pos):
-            for i in xrange(len(self.pitches)-1):
-                (pos0,pitch0) = self.pitches[i]
-                (pos1,pitch1) = self.pitches[i+1]
-                if pos0 <= pos and pos <= pos1:
-                    return (pos-pos0)*(pitch1-pitch0)/(pos1-pos0)+pitch0
-            return 0
-
-        def getavg(self, pos):
-            return self.avg
 
     def __init__(self, framerate,
                  pitchmin=70, pitchmax=400, threshold=0.7):
@@ -57,6 +60,10 @@ class PitchContour(object):
         self.wmin = (framerate/pitchmax)
         self.wmax = (framerate/pitchmin)
         self.threshold = threshold
+        self.reset()
+        return
+
+    def reset(self):
         self.segments = []
         self._offset = 0
         self._segment = None
@@ -70,16 +77,15 @@ class PitchContour(object):
             if self.threshold < mmax:
                 pitch = self.framerate/dmax
                 if self._segment is None:
-                    self._segment = self.Segment()
+                    self._segment = PitchSegment()
                     self.segments.append(self._segment)
                 self._segment.add(self._offset+i, pitch)
-                i += self.wmin/2
-            else:
+            elif mmax < 0.5:
                 if self._segment is not None:
                     self._segment.add(self._offset+i, 0)
                     self._segment.finish()
                     self._segment = None
-                i += self.wmin/2
+            i += self.wmin/2
         self._offset += nframes
         if self._segment is not None:
             self._segment.add(self._offset, 0)
@@ -110,9 +116,9 @@ def main(argv):
         return usage()
     pitchmin = 70
     pitchmax = 400
-    threshold = 0.7
+    threshold = 0.9
     for (k, v) in opts:
-        if k == '-M': (pitchmin,pitchmax) = (75,150) # male voice
+        if k == '-M': (pitchmin,pitchmax) = (75,200) # male voice
         elif k == '-F': (pitchmin,pitchmax) = (150,300) # female voice
         elif k == '-n': pitchmin = int(v)
         elif k == '-m': pitchmax = int(v)
