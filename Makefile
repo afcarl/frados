@@ -17,6 +17,9 @@ wavcorr.so: wavcorr.c
 	$(CP) build/lib.*/wavcorr.so .
 
 frados.py: wavcorr.so
+pitch.py: wavcorr.so
 
 test: frados.py
 	$(PYTHON) frados.py -M iloveyou.wav out.wav
+pitchtest: pitch.py
+	$(PYTHON) pitch.py iloveyou.wav
