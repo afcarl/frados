@@ -48,7 +48,7 @@ class WaveReader(object):
         if nframes == 0 or self._nframesleft < nframes:
             nframes = self._nframesleft
         self._nframesleft -= nframes
-        return self._fp.readframes(nframes)
+        return (nframes, self._fp.readframes(nframes))
     
     def read(self, nframes=0):
         data = self.readraw(nframes)

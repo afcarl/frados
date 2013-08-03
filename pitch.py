@@ -50,59 +50,35 @@ class PitchSegment(object):
         return self.avg
 
 
-##  PitchContour
+##  PitchDetector
 ##
-class PitchContour(object):
+class PitchDetector(object):
 
-    def __init__(self, framerate,
-                 pitchmin=70, pitchmax=400, threshold=0.7):
+    def __init__(self, framerate, pitchmin=70, pitchmax=400):
         self.framerate = framerate
         self.wmin = (framerate/pitchmax)
         self.wmax = (framerate/pitchmin)
-        self.threshold = threshold
         self.reset()
         return
 
     def reset(self):
-        self.segments = []
-        self._offset = 0
-        self._segment = None
+        self._buf = ''
+        self._nframes = 0
         return
     
-    def load(self, buf, nframes):
-        #print 'detection: %s samples...' % len(wav)
+    def feed(self, buf, nframes):
+        self._buf += buf
+        self._nframes += nframes
         i = 0
-        while i+self.wmax < nframes:
-            (dmax, mmax) = wavcorr.autocorrs16(self.wmin, self.wmax, buf, i)
-            if self.threshold < mmax:
-                pitch = self.framerate/dmax
-                if self._segment is None:
-                    self._segment = PitchSegment()
-                    self.segments.append(self._segment)
-                self._segment.add(self._offset+i, pitch)
-            elif mmax < 0.5:
-                if self._segment is not None:
-                    self._segment.add(self._offset+i, 0)
-                    self._segment.finish()
-                    self._segment = None
-            i += self.wmin/2
-        self._offset += nframes
-        if self._segment is not None:
-            self._segment.add(self._offset, 0)
-            self._segment.finish()
+        di = self.wmin/2
+        while i+self.wmax < self._nframes:
+            (dmax, mmax) = wavcorr.autocorrs16(self.wmin, self.wmax, self._buf, i)
+            pitch = self.framerate/dmax
+            yield (mmax, pitch, self._buf[i*2:(i+di)*2])
+            i += di
+        self._buf = self._buf[i*2:]
+        self._nframes -= i
         return
-
-    def getsrc(self, pos):
-        for seg in self.segments:
-            if seg.pos0 <= pos and pos <= seg.pos1:
-                return seg.getsrc(pos)
-        return 0
-
-    def getavg(self, pos):
-        for seg in self.segments:
-            if seg.pos0 <= pos and pos <= seg.pos1:
-                return seg.getavg(pos)
-        return 0
 
 # main
 def main(argv):
@@ -117,28 +93,26 @@ def main(argv):
     pitchmin = 70
     pitchmax = 400
     threshold = 0.9
+    bufsize = 10000
     for (k, v) in opts:
         if k == '-M': (pitchmin,pitchmax) = (75,200) # male voice
         elif k == '-F': (pitchmin,pitchmax) = (150,300) # female voice
         elif k == '-n': pitchmin = int(v)
         elif k == '-m': pitchmax = int(v)
         elif k == '-t': threshold = float(v)
-    contour = None
+    detector = None
     for path in args:
         src = WaveReader(path)
-        if contour is None:
-            contour = PitchContour(src.framerate,
-                                   pitchmin=pitchmin, pitchmax=pitchmax,
-                                   threshold=threshold)
-        contour.load(src.readraw(), src.nframes)
+        if detector is None:
+            detector = PitchDetector(src.framerate,
+                                     pitchmin=pitchmin, pitchmax=pitchmax)
+        while 1:
+            (nframes,buf) = src.readraw(bufsize)
+            if not nframes: break
+            pitches = detector.feed(buf, nframes)
+            for (w,freq,data) in pitches:
+                print w,freq
         src.close()
-    (t0,p0) = (0,0)
-    print t0, p0
-    for seg in contour.segments:
-        for (t1, p1) in seg.pitches:
-            if p0 != p1:
-                print t1, p1
-            (t0,p0) = (t1,p1)
     return
 
 if __name__ == '__main__': sys.exit(main(sys.argv))
