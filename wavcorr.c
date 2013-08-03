@@ -14,7 +14,7 @@ inline double hann(int i, int n) { return (1.0-cos(2.0*M_PI*i/n))/2.0; }
 
 
 /* calcsims16: compute the similarity between two vectors. */
-double calcsims16(int window, short* seq1, short* seq2)
+double calcsims16(int window, const short* seq1, const short* seq2)
 {
     int i;
     double n1 = 0, n2 = 0, dot = 0;
@@ -29,36 +29,55 @@ double calcsims16(int window, short* seq1, short* seq2)
 }
 
 /* autocorrs16: find the window that has the maximum similarity. */
-int autocorrs16(double* psim, int window0, int window1, int length, short* seq)
+int autocorrs16(double* sim, int window0, int window1, int length, const short* seq)
 {
-    if (window1 < window0) {
-	int x = window1;
-	window1 = window0;
-	window0 = x;
-    }
     /* assert(window0 <= window1); */
-  
-    int wmax = 0;
-    double smax = -1;
+
     int w;
+    for (w = window0; w <= window1; w++) {
+	sim[w-window0] = 0;
+    }
+  
+    /* Enhanced Auto Correlation:
+       The idea is taken from Tolonen and Karjalainen, 2000,
+       "A Computationally Efficient Multipitch Analysis Model"
+       IEEE Transactions on Speech and Audio Processing, 
+       Vol. 8, No. 6, Nov. 2000
+    */
     for (w = window0; w <= window1; w++) {
 	int w1 = window1 - (window1%w);
 	if (w1+w <= length) {
 	    double s = calcsims16(w1, seq, seq+w);
-	    if (smax < s) {
-		wmax = w;
-		smax = s;
+	    s += sim[w-window0];
+	    s = (0 < s)? s : 0;
+	    sim[w-window0] = s;
+	    /* remove overlapping freq. */
+	    int i2 = w*2-window0;
+	    if (i2+1 <= window1-window0) {
+		sim[i2] -= s;
+		sim[i2+1] -= s;
 	    }
 	}
     }
+
+    /* find the maximum similarity. */
+    int wmax = -1;
+    double smax = -1;
+    for (w = window0; w <= window1; w++) {
+	double s = sim[w-window0];
+	if (smax < s) {
+	    smax = s;
+	    wmax = w;
+	}
+    }
   
-    *psim = smax;
     return wmax;
 }
 
 /* autosplices16: find the window that has the maximum similarity. */
 int autosplices16(double* psim, int window0, int window1, 
-		  int length1, short* seq1, int length2, short* seq2)
+		  int length1, const short* seq1, 
+		  int length2, const short* seq2)
 {
     if (window1 < window0) {
 	int x = window1;
@@ -86,8 +105,8 @@ int autosplices16(double* psim, int window0, int window1,
 
 /* psolas16: overlap-add two vectors. */
 void psolas16(int outlen, short* out, 
-	      int length1, short* seq1, 
-	      int length2, short* seq2)
+	      int length1, const short* seq1, 
+	      int length2, const short* seq2)
 {
     int i;
 
@@ -170,9 +189,17 @@ static PyObject* pyautocorrs16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
+    if (window1 < window0) {
+	int x = window1;
+	window1 = window0;
+	window0 = x;
+    }
+    double* sim = (double*) PyMem_Malloc(sizeof(double)*(window1-window0+1));
+    if (sim == NULL) return PyErr_NoMemory();
     short* seq = (short*)PyString_AsString(data);
-    double smax = 0;
-    int wmax = autocorrs16(&smax, window0, window1, length-offset, &seq[offset]);
+    int wmax = autocorrs16(sim, window0, window1, length-offset, &seq[offset]);
+    double smax = sim[wmax-window0];
+    PyMem_Free(sim);
   
     PyObject* tuple;
     {
@@ -182,6 +209,7 @@ static PyObject* pyautocorrs16(PyObject* self, PyObject* args)
 	Py_DECREF(v1);
 	Py_DECREF(v2);
     }
+
     return tuple;
 }
 
@@ -265,6 +293,7 @@ static PyObject* pypsolas16(PyObject* self, PyObject* args)
 	PyErr_SetString(PyExc_ValueError, "Invalid outlen");
 	return NULL;
     }
+
     short* out = (short*) PyMem_Malloc(sizeof(short)*outlen);
     if (out == NULL) return PyErr_NoMemory();
 
