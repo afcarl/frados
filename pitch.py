@@ -113,7 +113,7 @@ def main(argv):
             pitches = detector.feed(buf, nframes)
             for (n,t,freq,data) in pitches:
                 if threshold <= t:
-                    print i,n,t,freq
+                    print i,n,t,freq,wavcorr.calcisf16(data,0,n)
                 i += n
         src.close()
     return

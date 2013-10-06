@@ -28,6 +28,18 @@ double calcsims16(int window, const short* seq1, const short* seq2)
     return (n1*n2)? (dot/sqrt(n1*n2)) : 0;
 }
 
+/* calcisf16: compute the intensity of samples. */
+double calcisf16(int length, const short* seq)
+{
+    int i;
+    double f = 0;
+    for (i = 0; i < length; i++) {
+	double x = seq[i]/32768.0;
+	f += x*x;
+    }
+    return (length == 0)? 0 : sqrt(f)/length;
+}
+
 /* autocorrs16: find the window that has the maximum similarity. */
 int autocorrs16(double* sim, int window0, int window1, int length, const short* seq)
 {
@@ -163,6 +175,36 @@ static PyObject* pycalcsims16(PyObject* self, PyObject* args)
     double sim = calcsims16(window, &seq1[offset1], &seq2[offset2]);
 
     return PyFloat_FromDouble(sim);
+}
+
+
+/* pycalcisf16(data, offset, window); */
+static PyObject* pycalcisf16(PyObject* self, PyObject* args)
+{
+    PyObject* data;
+    int offset;
+    int window;
+
+    if (!PyArg_ParseTuple(args, "Oii", &data, &offset, &window)) {
+	return NULL;
+    }
+
+    if (!PyString_CheckExact(data)) {
+	PyErr_SetString(PyExc_TypeError, "Must be string");
+	return NULL;
+    }
+
+    int length = PyString_Size(data) / sizeof(short);
+    if (window < 0 ||
+	offset < 0 || length < offset+window) {
+	PyErr_SetString(PyExc_ValueError, "Invalid offset/window");
+	return NULL;
+    }
+
+    short* seq = (short*)PyString_AsString(data);
+    double isf = calcisf16(window, &seq[offset]);
+
+    return PyFloat_FromDouble(isf);
 }
 
 
@@ -314,6 +356,9 @@ initwavcorr(void)
     static PyMethodDef functions[] = {
 	{ "calcsims16", (PyCFunction)pycalcsims16, METH_VARARGS,
 	  "calcsims16"
+	},
+	{ "calcisf16", (PyCFunction)pycalcisf16, METH_VARARGS,
+	  "calcisf16"
 	},
 	{ "autocorrs16", (PyCFunction)pyautocorrs16, METH_VARARGS,
 	  "autocorrs16"
