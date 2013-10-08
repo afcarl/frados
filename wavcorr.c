@@ -14,18 +14,27 @@ inline double hann(int i, int n) { return (1.0-cos(2.0*M_PI*i/n))/2.0; }
 
 
 /* calcsims16: compute the similarity between two vectors. */
-double calcsims16(int window, const short* seq1, const short* seq2)
+double calcsims16(int n, const short* seq1, const short* seq2)
 {
     int i;
-    double n1 = 0, n2 = 0, dot = 0;
-    for (i = 0; i < window; i++) {
+    double s1 = 0, s2 = 0;
+    double t1 = 0, t2 = 0;
+    double dot = 0;
+    for (i = 0; i < n; i++) {
 	double x1 = seq1[i]/32768.0;
 	double x2 = seq2[i]/32768.0;
-	n1 += x1*x1;
-	n2 += x2*x2;
+	s1 += x1;
+	s2 += x2;
+	t1 += x1*x1;
+	t2 += x2*x2;
 	dot += x1*x2;
     }
-    return (n1*n2)? (dot/sqrt(n1*n2)) : 0;
+    // sum((x1-s1/n)*(x2-s2/n))
+    //  = sum(x1*x2 - (s1*x2+s2*x1)/n + s1*s2/n/n)
+    //  = sum(x1*x2) - (s1*sum(x2) + s2*sum(x1))/n + s1*s2/n/n*sum(1)
+    //  = dot - 2*s1*s2/n + s1*s2/n = dot - s1*s2/n
+    double v = (n*t1-s1*s1) * (n*t2-s2*s2);
+    return (v == 0)? 0 : ((n*dot-s1*s2) / sqrt(v));
 }
 
 /* calcisf16: compute the intensity of samples. */
