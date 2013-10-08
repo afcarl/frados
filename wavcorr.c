@@ -8,13 +8,16 @@
 #include <string.h>
 #include <math.h>
 
+//typedef short int16le;
+typedef int16_t int16le;
+
 inline int min(int x, int y) { return (x < y)? x : y; }
 inline int max(int x, int y) { return (x < y)? y : x; }
 inline double hann(int i, int n) { return (1.0-cos(2.0*M_PI*i/n))/2.0; }
 
 
 /* calcsims16: compute the similarity between two vectors. */
-double calcsims16(int n, const short* seq1, const short* seq2)
+double calcsims16(int n, const int16le* seq1, const int16le* seq2)
 {
     int i;
     double s1 = 0, s2 = 0;
@@ -38,7 +41,7 @@ double calcsims16(int n, const short* seq1, const short* seq2)
 }
 
 /* calcisf16: compute the intensity of samples. */
-double calcisf16(int length, const short* seq)
+double calcisf16(int length, const int16le* seq)
 {
     int i;
     double f = 0;
@@ -50,7 +53,7 @@ double calcisf16(int length, const short* seq)
 }
 
 /* autocorrs16: find the window that has the maximum similarity. */
-int autocorrs16(double* sim, int window0, int window1, int length, const short* seq)
+int autocorrs16(double* sim, int window0, int window1, int length, const int16le* seq)
 {
     /* assert(window0 <= window1); */
 
@@ -97,8 +100,8 @@ int autocorrs16(double* sim, int window0, int window1, int length, const short* 
 
 /* autosplices16: find the window that has the maximum similarity. */
 int autosplices16(double* psim, int window0, int window1, 
-		  int length1, const short* seq1, 
-		  int length2, const short* seq2)
+		  int length1, const int16le* seq1, 
+		  int length2, const int16le* seq2)
 {
     if (window1 < window0) {
 	int x = window1;
@@ -125,9 +128,9 @@ int autosplices16(double* psim, int window0, int window1,
 }
 
 /* psolas16: overlap-add two vectors. */
-void psolas16(int outlen, short* out, 
-	      int length1, const short* seq1, 
-	      int length2, const short* seq2)
+void psolas16(int outlen, int16le* out, 
+	      int length1, const int16le* seq1, 
+	      int length2, const int16le* seq2)
 {
     int i;
 
@@ -142,7 +145,7 @@ void psolas16(int outlen, short* out,
 	    /* second half (increasing) */
 	    v += seq2[i*length2/outlen] * hann(i, outlen*2);
 	}
-	out[i] = (short)v;
+	out[i] = (int16le)v;
     }
 }
 
@@ -170,8 +173,8 @@ static PyObject* pycalcsims16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    int length1 = PyString_Size(data1) / sizeof(short);
-    int length2 = PyString_Size(data2) / sizeof(short);
+    int length1 = PyString_Size(data1) / sizeof(int16le);
+    int length2 = PyString_Size(data2) / sizeof(int16le);
     if (window < 0 ||
 	offset1 < 0 || length1 < offset1+window ||
 	offset2 < 0 || length2 < offset2+window) {
@@ -179,8 +182,8 @@ static PyObject* pycalcsims16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    short* seq1 = (short*)PyString_AsString(data1);
-    short* seq2 = (short*)PyString_AsString(data2);
+    int16le* seq1 = (int16le*)PyString_AsString(data1);
+    int16le* seq2 = (int16le*)PyString_AsString(data2);
     double sim = calcsims16(window, &seq1[offset1], &seq2[offset2]);
 
     return PyFloat_FromDouble(sim);
@@ -203,14 +206,14 @@ static PyObject* pycalcisf16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    int length = PyString_Size(data) / sizeof(short);
+    int length = PyString_Size(data) / sizeof(int16le);
     if (window < 0 ||
 	offset < 0 || length < offset+window) {
 	PyErr_SetString(PyExc_ValueError, "Invalid offset/window");
 	return NULL;
     }
 
-    short* seq = (short*)PyString_AsString(data);
+    int16le* seq = (int16le*)PyString_AsString(data);
     double isf = calcisf16(window, &seq[offset]);
 
     return PyFloat_FromDouble(isf);
@@ -233,7 +236,7 @@ static PyObject* pyautocorrs16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    int length = PyString_Size(data) / sizeof(short);
+    int length = PyString_Size(data) / sizeof(int16le);
     if (window0 < 0 || window1 < 0 || 
 	offset < 0 || length < offset+window0 || length < offset+window1) {
 	PyErr_SetString(PyExc_ValueError, "Invalid offset/window");
@@ -247,7 +250,7 @@ static PyObject* pyautocorrs16(PyObject* self, PyObject* args)
     }
     double* sim = (double*) PyMem_Malloc(sizeof(double)*(window1-window0+1));
     if (sim == NULL) return PyErr_NoMemory();
-    short* seq = (short*)PyString_AsString(data);
+    int16le* seq = (int16le*)PyString_AsString(data);
     int wmax = autocorrs16(sim, window0, window1, length-offset, &seq[offset]);
     double smax = sim[wmax-window0];
     PyMem_Free(sim);
@@ -282,8 +285,8 @@ static PyObject* pyautosplices16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    int length1 = PyString_Size(data1) / sizeof(short);
-    int length2 = PyString_Size(data2) / sizeof(short);
+    int length1 = PyString_Size(data1) / sizeof(int16le);
+    int length2 = PyString_Size(data2) / sizeof(int16le);
     if (window0 < 0 || window1 < 0 ||
 	length1 < window0 || length1 < window1 ||
 	length2 < window0 || length2 < window1) {
@@ -291,8 +294,8 @@ static PyObject* pyautosplices16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    short* seq1 = (short*)PyString_AsString(data1);
-    short* seq2 = (short*)PyString_AsString(data2);  
+    int16le* seq1 = (int16le*)PyString_AsString(data1);
+    int16le* seq2 = (int16le*)PyString_AsString(data2);  
     double smax = 0;
     int wmax = autosplices16(&smax, window0, window1, length1, seq1, length2, seq2);
   
@@ -331,8 +334,8 @@ static PyObject* pypsolas16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    int length1 = PyString_Size(data1) / sizeof(short);
-    int length2 = PyString_Size(data2) / sizeof(short);
+    int length1 = PyString_Size(data1) / sizeof(int16le);
+    int length2 = PyString_Size(data2) / sizeof(int16le);
     if (window1 < 0 || window2 < 0 || 
 	offset1 < 0 || length1 < offset1+window1 ||
 	offset2 < 0 || length2 < offset2+window2) {
@@ -345,13 +348,13 @@ static PyObject* pypsolas16(PyObject* self, PyObject* args)
 	return NULL;
     }
 
-    short* out = (short*) PyMem_Malloc(sizeof(short)*outlen);
+    int16le* out = (int16le*) PyMem_Malloc(sizeof(int16le)*outlen);
     if (out == NULL) return PyErr_NoMemory();
 
-    short* seq1 = (short*)PyString_AsString(data1);
-    short* seq2 = (short*)PyString_AsString(data2);
+    int16le* seq1 = (int16le*)PyString_AsString(data1);
+    int16le* seq2 = (int16le*)PyString_AsString(data2);
     psolas16(outlen, out, window1, &seq1[offset1], window2, &seq2[offset2]);
-    PyObject* obj = PyString_FromStringAndSize((char*)out, sizeof(short)*outlen);
+    PyObject* obj = PyString_FromStringAndSize((char*)out, sizeof(int16le)*outlen);
     PyMem_Free(out);
   
     return obj;
