@@ -10,6 +10,7 @@
 
 //typedef short int16le;
 typedef int16_t int16le;
+static const double DIV16 = 1.0/32768.0;
 
 inline int min(int x, int y) { return (x < y)? x : y; }
 inline int max(int x, int y) { return (x < y)? y : x; }
@@ -24,8 +25,8 @@ double calcsims16(int n, const int16le* seq1, const int16le* seq2)
     double t1 = 0, t2 = 0;
     double dot = 0;
     for (i = 0; i < n; i++) {
-	double x1 = seq1[i]/32768.0;
-	double x2 = seq2[i]/32768.0;
+	double x1 = seq1[i]*DIV16;
+	double x2 = seq2[i]*DIV16;
 	s1 += x1;
 	s2 += x2;
 	t1 += x1*x1;
@@ -40,16 +41,18 @@ double calcsims16(int n, const int16le* seq1, const int16le* seq2)
     return (v == 0)? 0 : ((n*dot-s1*s2) / sqrt(v));
 }
 
-/* calcisf16: compute the intensity of samples. */
-double calcisf16(int length, const int16le* seq)
+/* calcmags16: compute the intensity of samples. */
+double calcmags16(int length, const int16le* seq)
 {
+    int16le m0 = SHRT_MAX;
+    int16le m1 = SHRT_MIN;
     int i;
-    double f = 0;
     for (i = 0; i < length; i++) {
-	double x = seq[i]/32768.0;
-	f += x*x;
+	int16le x = seq[i];
+	if (m1 < x) m1 = x;
+	if (x < m0) m0 = x;
     }
-    return (length == 0)? 0 : sqrt(f)/length;
+    return ((double)m1 - (double)m0)/2 * DIV16;
 }
 
 /* autocorrs16: find the window that has the maximum similarity. */
@@ -190,8 +193,8 @@ static PyObject* pycalcsims16(PyObject* self, PyObject* args)
 }
 
 
-/* pycalcisf16(data, offset, window); */
-static PyObject* pycalcisf16(PyObject* self, PyObject* args)
+/* pycalcmags16(data, offset, window); */
+static PyObject* pycalcmags16(PyObject* self, PyObject* args)
 {
     PyObject* data;
     int offset;
@@ -214,9 +217,9 @@ static PyObject* pycalcisf16(PyObject* self, PyObject* args)
     }
 
     int16le* seq = (int16le*)PyString_AsString(data);
-    double isf = calcisf16(window, &seq[offset]);
+    double mag = calcmags16(window, &seq[offset]);
 
-    return PyFloat_FromDouble(isf);
+    return PyFloat_FromDouble(mag);
 }
 
 
@@ -369,8 +372,8 @@ initwavcorr(void)
 	{ "calcsims16", (PyCFunction)pycalcsims16, METH_VARARGS,
 	  "calcsims16"
 	},
-	{ "calcisf16", (PyCFunction)pycalcisf16, METH_VARARGS,
-	  "calcisf16"
+	{ "calcmags16", (PyCFunction)pycalcmags16, METH_VARARGS,
+	  "calcmags16"
 	},
 	{ "autocorrs16", (PyCFunction)pyautocorrs16, METH_VARARGS,
 	  "autocorrs16"

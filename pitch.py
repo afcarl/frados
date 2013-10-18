@@ -74,7 +74,8 @@ class PitchDetector(object):
         while i+self.wmax < self._nframes:
             (dmax, mmax) = wavcorr.autocorrs16(self.wmin, self.wmax, self._buf, i)
             pitch = self.framerate/dmax
-            yield (n, mmax, pitch, self._buf[i*2:(i+n)*2])
+            mag = wavcorr.calcmags16(self._buf, i, dmax)
+            yield (n, mmax, pitch, mag, self._buf[i*2:(i+n)*2])
             i += n
         self._buf = self._buf[i*2:]
         self._nframes -= i
@@ -111,9 +112,9 @@ def main(argv):
             (nframes,buf) = src.readraw(bufsize)
             if not nframes: break
             pitches = detector.feed(buf, nframes)
-            for (n,t,freq,data) in pitches:
+            for (n,t,freq,mag,data) in pitches:
                 if threshold <= t:
-                    print i,n,t,freq
+                    print i,n,t,freq,mag
                 else:
                     print i,n,t
                 i += n
